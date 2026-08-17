@@ -76,13 +76,24 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         uses: space-wizards/submodule-dependency@v0.1.5
 
-      - name: Build & package server (linux-x64)
+      # --hybrid-acz is NOT optional for a self-hosted server.
+      # Without it the server package contains no Content.Client.zip, so the
+      # first time a launcher or the SS14 hub hits GET /info the server falls
+      # back to "Magic ACZ" and tries to package the client FROM SOURCE:
+      #   [DEBG] statushost.acz: Using Magic ACZ
+      #   [FATL] unhandled: DirectoryNotFoundException '/bin/Content.Client/Content.Shared.dll'
+      #   Aborted (core dumped) ./Robust.Server
+      # A release package has no source tree, so it aborts the process — the
+      # exception is thrown on a threadpool thread, so it kills the server,
+      # not just the request. Symptom is a crash-loop every couple of minutes
+      # (the hub polls) that looks like "crashes when a player connects".
+      - name: Build & package server (linux-x64, hybrid ACZ)
         if: steps.check.outputs.exists == 'false'
         run: |
           set -e
           dotnet restore
           dotnet build Content.Packaging --configuration Release --no-restore /m
-          dotnet run --project Content.Packaging server --platform linux-x64
+          dotnet run --project Content.Packaging server --hybrid-acz --platform linux-x64
 
       - name: List build output
         if: steps.check.outputs.exists == 'false'
